@@ -226,6 +226,35 @@ benchmarks! {
             T::Currency::free_balance(&caller),
         );
     }
+
+    ext_gas {
+        let endowment = Config::<T>::subsistence_threshold_uncached();
+        let value = T::Currency::minimum_balance() * 100.into();
+        let caller = create_funded_user::<T>("caller", 0);
+        let (binary, hash) = load_module!("gas");
+        let addr = T::DetermineContractAddress::contract_address_for(&hash, &[], &caller);
+        Contracts::<T>::put_code_raw(binary.to_vec())
+            .unwrap();
+        Contracts::<T>::instantiate(
+            RawOrigin::Signed(caller.clone()).into(),
+            endowment,
+            Weight::max_value(),
+            hash,
+            vec![],
+        ).unwrap();
+    }: call(
+            RawOrigin::Signed(caller.clone()),
+            T::Lookup::unlookup(addr),
+            value,
+            Weight::max_value(),
+            vec![]
+        )
+    verify {
+        assert_eq!(
+            funding::<T>() - endowment - value,
+            T::Currency::free_balance(&caller),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -267,5 +296,13 @@ mod tests {
 		ExtBuilder::default().build().execute_with(|| {
 			assert_ok!(test_benchmark_claim_surcharge::<Test>());
 		});
+    }
+
+    #[test]
+    fn ext_gas() {
+		ExtBuilder::default().build().execute_with(|| {
+			assert_ok!(test_benchmark_ext_gas::<Test>());
+		});
 	}
+
 }
